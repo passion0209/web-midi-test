@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web MIDI 键盘诊断</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17201d;
+        --muted: #65716c;
+        --line: #d9e1dd;
+        --paper: #f4f7f5;
+        --panel: #ffffff;
+        --accent: #156b4b;
+        --accent-strong: #0d5037;
+        --danger: #a13d2d;
+        --warning: #8b5a16;
+        --success: #176b46;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(rgba(21, 107, 75, 0.055) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(21, 107, 75, 0.055) 1px, transparent 1px),
+          var(--paper);
+        background-size: 28px 28px;
+        color: var(--ink);
+        font-family:
+          "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      }
+
+      main {
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 40px 0 64px;
+      }
+
+      header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 5vw, 46px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .lead {
+        max-width: 520px;
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .environment {
+        flex: none;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 10px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .environment strong {
+        color: var(--success);
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      button {
+        min-height: 44px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #fff;
+        padding: 0 20px;
+        font: inherit;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      button:hover:not(:disabled) {
+        background: var(--accent-strong);
+      }
+
+      button:focus-visible {
+        outline: 3px solid rgba(21, 107, 75, 0.25);
+        outline-offset: 2px;
+      }
+
+      button.secondary {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+      }
+
+      button.secondary:hover:not(:disabled) {
+        background: #eef3f0;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      #status {
+        min-width: 0;
+        flex: 1;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      #status[data-kind="success"] {
+        color: var(--success);
+      }
+
+      #status[data-kind="warning"] {
+        color: var(--warning);
+      }
+
+      #status[data-kind="error"] {
+        color: var(--danger);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        gap: 16px;
+        margin-top: 16px;
+      }
+
+      section {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 20px;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 17px;
+        letter-spacing: 0;
+      }
+
+      #devices {
+        display: grid;
+        gap: 10px;
+      }
+
+      .device {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 12px;
+      }
+
+      .device-label {
+        min-width: 0;
+      }
+
+      .device-name {
+        overflow-wrap: anywhere;
+        font-weight: 650;
+      }
+
+      .device-meta {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        flex: none;
+        border-radius: 50%;
+        background: #a8b2ad;
+      }
+
+      .dot.connected {
+        background: var(--success);
+      }
+
+      .empty {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .note-display {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 12px;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .metric-value {
+        margin-top: 5px;
+        overflow-wrap: anywhere;
+        font-size: 22px;
+        font-weight: 750;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .event-log {
+        height: 232px;
+        margin: 14px 0 0;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #101815;
+        color: #d9efe5;
+        padding: 12px;
+        font: 12px/1.65 Consolas, "Courier New", monospace;
+      }
+
+      .event-log:empty::before {
+        content: "等待 MIDI 消息…";
+        color: #91a49b;
+      }
+
+      .footnote {
+        margin: 18px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      @media (max-width: 720px) {
+        main {
+          padding-top: 24px;
+        }
+
+        header {
+          display: block;
+        }
+
+        .environment {
+          display: inline-block;
+          margin-top: 16px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Web MIDI 键盘诊断</h1>
+          <p class="lead">
+            点击连接后，浏览器会申请 MIDI 权限。连接成功时页面会显示键盘名称，按下琴键后会显示音符和原始 MIDI 消息。
+          </p>
+        </div>
+        <div class="environment" id="environment">正在检查浏览器环境…</div>
+      </header>
+
+      <div class="toolbar">
+        <button id="connect" type="button">连接 MIDI 键盘</button>
+        <button class="secondary" id="refresh" type="button" disabled>
+          刷新设备
+        </button>
+        <span id="status" role="status">等待连接</span>
+      </div>
+
+      <div class="grid">
+        <section>
+          <h2>MIDI 输入设备</h2>
+          <div id="devices" class="empty">
+            尚未连接。请先将 USB MIDI 键盘接到电脑，再点击“连接 MIDI 键盘”。
+          </div>
+        </section>
+
+        <section>
+          <h2>实时消息</h2>
+          <div class="note-display">
+            <div class="metric">
+              <div class="metric-label">当前音符</div>
+              <div class="metric-value" id="note">--</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">力度 / 通道</div>
+              <div class="metric-value" id="velocity">--</div>
+            </div>
+          </div>
+          <pre id="event-log" class="event-log" aria-live="polite"></pre>
+        </section>
+      </div>
+
+      <p class="footnote">
+        此页只读取键盘输入，不上传音频或按键数据。请使用最新版电脑 Chrome 或 Edge
+        打开；如果浏览器显示“不支持”，需要更换浏览器而不是检查 USB 连接。
+      </p>
+    </main>
+
+    <script>
+      const connectButton = document.querySelector("#connect");
+      const refreshButton = document.querySelector("#refresh");
+      const statusElement = document.querySelector("#status");
+      const environmentElement = document.querySelector("#environment");
+      const devicesElement = document.querySelector("#devices");
+      const noteElement = document.querySelector("#note");
+      const velocityElement = document.querySelector("#velocity");
+      const logElement = document.querySelector("#event-log");
+
+      let midiAccess = null;
+      const noteNames = [
+        "C",
+        "C#",
+        "D",
+        "D#",
+        "E",
+        "F",
+        "F#",
+        "G",
+        "G#",
+        "A",
+        "A#",
+        "B",
+      ];
+
+      function setStatus(message, kind = "") {
+        statusElement.textContent = message;
+        statusElement.dataset.kind = kind;
+      }
+
+      function noteName(noteNumber) {
+        const octave = Math.floor(noteNumber / 12) - 1;
+        return `${noteNames[noteNumber % 12]}${octave}`;
+      }
+
+      function log(message) {
+        const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+        logElement.textContent += `[${time}] ${message}\n`;
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+
+      function handleMidiMessage(event) {
+        const [status, data1 = 0, data2 = 0] = event.data;
+        const command = status & 0xf0;
+        const channel = (status & 0x0f) + 1;
+        const raw = Array.from(event.data)
+          .map((value) => value.toString(16).padStart(2, "0").toUpperCase())
+          .join(" ");
+
+        if (command === 0x90 && data2 > 0) {
+          noteElement.textContent = noteName(data1);
+          velocityElement.textContent = `${data2} / ${channel}`;
+          log(`Note On   ${noteName(data1)}  velocity=${data2}  channel=${channel}  [${raw}]`);
+        } else if (command === 0x80 || (command === 0x90 && data2 === 0)) {
+          noteElement.textContent = `${noteName(data1)} 已松开`;
+          log(`Note Off  ${noteName(data1)}  channel=${channel}  [${raw}]`);
+        } else if (command === 0xb0) {
+          log(`Control   CC${data1}=${data2}  channel=${channel}  [${raw}]`);
+        } else if (command === 0xe0) {
+          const bend = (data2 << 7) | data1;
+          log(`Pitch Bend ${bend}  channel=${channel}  [${raw}]`);
+        } else {
+          log(`MIDI      ${raw}`);
+        }
+      }
+
+      function renderDevices() {
+        if (!midiAccess) {
+          return;
+        }
+
+        const inputs = Array.from(midiAccess.inputs.values());
+        devicesElement.className = inputs.length ? "" : "empty";
+
+        if (!inputs.length) {
+          devicesElement.textContent =
+            "已获得 MIDI 权限，但没有发现输入设备。请检查 USB 线、键盘电源和驱动后点击“刷新设备”。";
+          setStatus("未发现 MIDI 键盘", "warning");
+          return;
+        }
+
+        devicesElement.replaceChildren();
+        inputs.forEach((input) => {
+          input.onmidimessage = handleMidiMessage;
+
+          const row = document.createElement("div");
+          row.className = "device";
+
+          const label = document.createElement("div");
+          label.className = "device-label";
+
+          const name = document.createElement("div");
+          name.className = "device-name";
+          name.textContent = input.name || "未命名 MIDI 输入";
+
+          const meta = document.createElement("div");
+          meta.className = "device-meta";
+          meta.textContent = `${input.manufacturer || "未知厂商"} · ${
+            input.state === "connected" ? "已连接" : "未连接"
+          }`;
+
+          const dot = document.createElement("span");
+          dot.className = `dot ${input.state === "connected" ? "connected" : ""}`;
+          dot.setAttribute(
+            "aria-label",
+            input.state === "connected" ? "已连接" : "未连接",
+          );
+
+          label.append(name, meta);
+          row.append(label, dot);
+          devicesElement.append(row);
+        });
+
+        setStatus(`已发现 ${inputs.length} 个 MIDI 输入设备，请按一下琴键`, "success");
+      }
+
+      function onStateChange() {
+        renderDevices();
+      }
+
+      async function connectMidi() {
+        connectButton.disabled = true;
+        setStatus("正在等待浏览器授权…");
+
+        try {
+          if (!navigator.requestMIDIAccess) {
+            throw new Error("当前浏览器不支持 Web MIDI");
+          }
+
+          midiAccess =
+            midiAccess ||
+            (await navigator.requestMIDIAccess({
+              sysex: false,
+              software: false,
+            }));
+          midiAccess.onstatechange = onStateChange;
+          refreshButton.disabled = false;
+          renderDevices();
+          connectButton.textContent = "已连接";
+        } catch (error) {
+          const message =
+            error && error.message ? error.message : "浏览器未授予 MIDI 权限";
+          setStatus(`连接失败：${message}`, "error");
+          log(`连接失败：${message}`);
+          connectButton.disabled = false;
+        }
+      }
+
+      function initialize() {
+        const secure = window.isSecureContext;
+        const supported = Boolean(navigator.requestMIDIAccess);
+
+        environmentElement.innerHTML = secure
+          ? supported
+            ? "<strong>HTTPS 安全环境</strong> · Web MIDI 可用"
+            : "HTTPS 安全环境 · <strong>浏览器不支持 Web MIDI</strong>"
+          : "<strong>不是 HTTPS 安全环境</strong> · 无法使用 Web MIDI";
+
+        if (!secure) {
+          setStatus("请使用 HTTPS 地址打开此页面", "error");
+          connectButton.disabled = true;
+        } else if (!supported) {
+          setStatus("请使用最新版电脑 Chrome 或 Edge", "error");
+          connectButton.disabled = true;
+        }
+      }
+
+      connectButton.addEventListener("click", connectMidi);
+      refreshButton.addEventListener("click", () => {
+        renderDevices();
+        log("已刷新 MIDI 输入设备");
+      });
+
+      initialize();
+    </script>
+  </body>
+</html>
